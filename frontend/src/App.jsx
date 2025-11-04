@@ -7,6 +7,8 @@ import CodeConnect from './CodeConnect'
 import { AuthProvider, useAuth } from './AuthContext'
 import Login from './Login'
 import PatientHistory from './PatientHistory'
+import Navbar from './components/Navbar'
+import Toast from './components/Toast'
 
 function AppInner() {
   const [hospitalId] = useState('demo-hospital-123')
@@ -26,16 +28,7 @@ function AppInner() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white/80 backdrop-blur dark:border-gray-800 dark:bg-gray-900/80">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-tight">Med4U Connect</h1>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 dark:text-gray-300">{user.email}</span>
-            <button className="btn btn-secondary" onClick={logout}>Logout</button>
-          </div>
-        </div>
-      </header>
+      <Navbar user={user} onLogout={logout} />
 
       {/* Content */}
       <main className="mx-auto max-w-6xl px-4 py-6">
@@ -60,7 +53,7 @@ function AppInner() {
             <div className="card p-4">
               <h2 className="text-lg font-medium mb-3">Upload Report</h2>
               {access && patientId ? (
-                <LabUpload accessToken={access.accessToken} patientId={patientId} />
+                <LabUpload accessToken={access.accessToken} patientId={patientId} onUploaded={() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Report uploaded successfully' } }))} />
               ) : (
                 <div className="text-sm text-gray-500">Connect to a patient to enable uploads.</div>
               )}
@@ -79,6 +72,19 @@ function AppInner() {
           </div>
         </div>
       </main>
+
+      {/* Floating Action Button */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+        <button className="btn btn-primary shadow-xl rounded-full h-14 w-14 p-0" title="Upload Report" onClick={() => {
+          const el = document.querySelector('h2.text-lg.font-medium.mb-3')
+          if (el) el.scrollIntoView({ behavior: 'smooth' })
+        }}>
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5v14m-7-7h14"/></svg>
+        </button>
+      </div>
+
+      {/* Toast listener */}
+      <ToastHost />
     </div>
   )
 }
@@ -92,3 +98,19 @@ function App() {
 }
 
 export default App
+
+function ToastHost() {
+  const [open, setOpen] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [type, setType] = useState('success')
+  useEffect(() => {
+    const handler = (e) => {
+      setType(e.detail?.type || 'success')
+      setMsg(e.detail?.message || '')
+      setOpen(true)
+    }
+    window.addEventListener('toast', handler)
+    return () => window.removeEventListener('toast', handler)
+  }, [])
+  return <Toast open={open} type={type} message={msg} onClose={() => setOpen(false)} />
+}
