@@ -35,3 +35,6 @@ dist/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Firebase service account
+backend/src/connect/common/firebaseServiceAccount.json
