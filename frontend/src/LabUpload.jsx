@@ -25,7 +25,6 @@ export default function LabUpload({ accessToken, patientId }) {
         method: 'POST',
         token: accessToken,
         body: JSON.stringify({
-          accessToken,
           patientId,
           reportTitle: form.title || 'Lab Report',
           reportType: form.type || 'Lab Results',

@@ -213,12 +213,17 @@ app.post('/upload-report-file', upload.single('file'), async (req, res) => {
 // Hospital uploads report (align with Med4U 'reports' collection schema)
 // Body: { accessToken, patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary }
 app.post('/hospital-upload-report', async (req, res) => {
-  console.log('[SERVER] Hospital upload report requested');
-  const { accessToken, patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary } = req.body;
+  console.log('[API] Hospital upload report requested');
+  const token = req.headers.authorization?.split('Bearer ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'No authorization token provided' });
+  }
+
+  const { patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary } = req.body;
   try {
-    const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded.scope.includes('upload')) {
-      console.log('[SERVER] Upload permission denied');
+      console.log('[API] Upload permission denied');
       return res.status(403).json({ error: 'No upload permission' });
     }
     const reportDoc = {
