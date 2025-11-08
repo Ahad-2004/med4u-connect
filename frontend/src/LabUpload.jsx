@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { uploadFile } from './services/cloudinaryStorage';
-
-const API_BASE = import.meta.env.VITE_CONNECT_API_BASE || 'http://localhost:4000';
+import { apiRequest } from './services/api';
 
 export default function LabUpload({ accessToken, patientId }) {
   const [form, setForm] = useState({ title: '', type: 'Lab Results', date: '', url: '' });
@@ -22,26 +21,27 @@ export default function LabUpload({ accessToken, patientId }) {
         );
       }
 
-      const res = await fetch(`${API_BASE}/hospital-upload-report`, {
+      const data = await apiRequest('/hospital-upload-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        token: accessToken,
         body: JSON.stringify({
           accessToken,
           patientId,
-          reportTitle: form.title,
-          reportType: form.type,
-          reportDate: form.date,
+          reportTitle: form.title || 'Lab Report',
+          reportType: form.type || 'Lab Results',
+          reportDate: form.date || new Date().toISOString().split('T')[0],
           reportUrl: uploadMeta?.downloadURL || form.url || null,
           fileSize: uploadMeta?.size || null,
           fileType: uploadMeta?.type || null
         })
       });
-      if (!res.ok) throw new Error('Upload failed');
       setMsg('Uploaded successfully');
       setProgress(0);
       setFile(null);
+      setForm({ title: '', type: 'Lab Results', date: '', url: '' });
     } catch (e) {
-      setMsg('Upload failed');
+      console.error('Upload error:', e);
+      setMsg(e.message || 'Upload failed');
     }
   };
 

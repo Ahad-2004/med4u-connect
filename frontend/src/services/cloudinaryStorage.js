@@ -1,5 +1,7 @@
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'med4u_uploads';
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'dnqn5xuyc';
+import { CLOUDINARY_CONFIG } from './api';
+
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || CLOUDINARY_CONFIG.UPLOAD_PRESET;
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || CLOUDINARY_CONFIG.CLOUD_NAME;
 
 export const uploadFile = (file, path, progressCallback = null) => {
   return new Promise((resolve, reject) => {
