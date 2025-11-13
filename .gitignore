@@ -38,3 +38,6 @@ Thumbs.db
 
 # Firebase service account
 backend/src/connect/common/firebaseServiceAccount.json
+
+# Ignore local service account keys
+/backend/config/serviceAccountKey.json

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_CONNECT_API_BASE || 'http://localhost:4000';
+import { apiRequest } from './services/api';
 
 function Avatar({ name, id }) {
   const initials = useMemo(() => {
@@ -42,7 +41,7 @@ function FileIcon({ url, type }) {
 }
 
 export default function DoctorPatientView({ accessToken, patientId }) {
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState({ medications: [], conditions: [] });
   const [reports, setReports] = useState([]);
   const [error, setError] = useState('');
   const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
@@ -50,21 +49,22 @@ export default function DoctorPatientView({ accessToken, patientId }) {
   useEffect(() => {
     async function load() {
       try {
-        const [pRes, rRes] = await Promise.all([
-          fetch(`${API_BASE}/hospital-get-profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken, patientId }) }),
-          fetch(`${API_BASE}/hospital-get-reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken, patientId }) })
-        ]);
-        if (!pRes.ok || !rRes.ok) throw new Error('Fetch failed');
-        const p = await pRes.json();
-        const r = await rRes.json();
-        setProfile(p);
-        setReports(r.reports || []);
+        const response = await apiRequest('/hospital-get-profile', {
+          method: 'POST',
+          body: JSON.stringify({ accessToken, patientId })
+        });
+        setProfile({
+          medications: response.medications || [],
+          conditions: response.conditions || [],
+        });
+        setReports(response.recentReports || []);
       } catch (e) {
+        console.error('[FRONTEND] Failed to load patient data:', e.message);
         setError('Failed to load patient data');
       }
     }
-    if (accessToken && patientId) load();
-  }, [accessToken, patientId]);
+    if (patientId && accessToken) load();
+  }, [patientId, accessToken]);
 
   const sortedReports = useMemo(() => {
     const arr = [...reports];
@@ -79,7 +79,9 @@ export default function DoctorPatientView({ accessToken, patientId }) {
   }, [reports, sort]);
 
   if (error) return <div className="text-red-600 text-sm">{error}</div>;
-  if (!profile) return <div className="text-sm text-gray-500">Loading patient data…</div>;
+  // consider "loading" if both empty after mount
+  if (!profile || (!profile.medications.length && !profile.conditions.length && !reports.length))
+    return <div className="text-sm text-gray-500">No patient data found or loading…</div>;
 
   const allergies = (profile.conditions || []).filter(c => c.type === 'allergy');
   const conditions = (profile.conditions || []).filter(c => c.type !== 'allergy');
@@ -89,34 +91,19 @@ export default function DoctorPatientView({ accessToken, patientId }) {
     <div className="space-y-4">
       <div className="card p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Avatar name={profile?.name} id={patientId} />
+          <Avatar id={patientId} />
           <div>
-            <div className="text-sm text-gray-500">Patient</div>
-            <div className="text-base font-semibold">{profile?.name || patientId}</div>
+            <div className="text-sm text-gray-500">Patient ID</div>
+            <div className="text-base font-semibold">{patientId}</div>
           </div>
         </div>
         <div className="text-xs text-gray-500">Overview</div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Allergies"
-          value={allergies.length}
-          accent="bg-rose-500"
-          icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-4.5-8-10a8 8 0 1116 0c0 5.5-8 10-8 10z"/></svg>}
-        />
-        <StatCard
-          label="Medications"
-          value={meds.length}
-          accent="bg-teal-600"
-          icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v4H7z"/><path d="M5 11h14v8a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>}
-        />
-        <StatCard
-          label="Conditions"
-          value={conditions.length}
-          accent="bg-blue-600"
-          icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>}
-        />
+        <StatCard label="Allergies" value={allergies.length} accent="bg-rose-500" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-4.5-8-10a8 8 0 1116 0c0 5.5-8 10-8 10z"/></svg>} />
+        <StatCard label="Medications" value={meds.length} accent="bg-teal-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v4H7z"/><path d="M5 11h14v8a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>} />
+        <StatCard label="Conditions" value={conditions.length} accent="bg-blue-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -125,9 +112,7 @@ export default function DoctorPatientView({ accessToken, patientId }) {
           <div className="flex flex-wrap gap-2">
             {allergies.length === 0 && <span className="text-xs text-gray-500">No allergies recorded</span>}
             {allergies.map(a => (
-              <span key={a.id} className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-200">
-                {a.name || a.title}
-              </span>
+              <span key={a.id} className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-200">{a.name || a.title}</span>
             ))}
           </div>
         </div>

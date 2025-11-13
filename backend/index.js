@@ -62,8 +62,38 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+
+// CORS configuration: reflect allowed origin and allow credentials
+const FRONTEND_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',');
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && FRONTEND_ORIGINS.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  // Always allow these headers for preflight and simple requests
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+// Parse JSON bodies with increased limit for file metadata
+app.use(bodyParser.json({ limit: '10mb' }));
+
+// Debug endpoint - local only. Returns service account and project info to help diagnose auth issues.
+app.get('/debug-firebase', (req, res) => {
+  try {
+    const info = {
+      initializedApps: admin.apps.length,
+      projectId: (admin.app && admin.app().options && admin.app().options.projectId) || serviceAccount.project_id,
+      clientEmail: serviceAccount.client_email,
+      privateKeyPresent: !!serviceAccount.private_key
+    };
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read admin info', details: err && err.message });
+  }
+});
 
 // Utility: Encrypt report
 function encryptReport(buffer, key) {
@@ -131,9 +161,15 @@ app.post('/register-user-code', async (req, res) => {
   try {
     const { userId, code } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId required' });
+    
+    console.log(`[API] Register user code request: userId=${userId}, code=${code}`);
+    console.log(`[DEBUG] Request body:`, JSON.stringify(req.body));
 
     // Remove existing codes for this user
+    console.log(`[DEBUG] Checking for existing codes for user: ${userId}`);
     const existing = await db.collection('userCodes').where('userId', '==', userId).get();
+    console.log(`[DEBUG] Found ${existing.size} existing codes`);
+    
     const batch = db.batch();
     existing.forEach(doc => batch.delete(doc.ref));
     if (!existing.empty) await batch.commit();
@@ -145,28 +181,77 @@ app.post('/register-user-code', async (req, res) => {
       if (!snap.exists) break;
       finalCode = generateUserCode();
     }
+    
+    console.log(`[DEBUG] Writing code to Firestore: ${finalCode}`);
     await db.collection('userCodes').doc(finalCode).set({ userId, createdAt: Date.now() });
+    console.log(`[SUCCESS] Code registered: ${finalCode}`);
+    
     res.json({ code: finalCode });
   } catch (err) {
-    res.status(400).json({ error: 'Failed to register code' });
+    console.error('[API] Register user code error:', err && err.message ? err.message : err);
+    console.error('[API] Error code:', err && err.code);
+    if (err && err.stack) console.error('[API] Stack:', err.stack);
+    res.status(400).json({ 
+      error: 'Failed to register code', 
+      details: err && err.message,
+      code: err && err.code
+    });
   }
 });
 
 // Exchange a user's code for a scoped access token
-// Body: { code, hospitalId, requestedScope, durationSeconds }
+// Body: { code, hospitalId, requestedScope, durationSeconds, doctorId? }
 app.post('/exchange-user-code', async (req, res) => {
   try {
-    const { code, hospitalId, requestedScope = ['view'], durationSeconds = 1800 } = req.body;
+    const { code, hospitalId, requestedScope = ['view'], durationSeconds = 1800, doctorId } = req.body;
+    console.log(`[API] Exchange code request: code=${code}, hospitalId=${hospitalId}, doctorId=${doctorId}, scope=${JSON.stringify(requestedScope)}`);
+    console.log(`[DEBUG] Full request body:`, JSON.stringify(req.body));
+    
+    console.log(`[DEBUG] Looking up code: ${code}`);
     const codeDoc = await db.collection('userCodes').doc(String(code).toUpperCase()).get();
-    if (!codeDoc.exists) return res.status(404).json({ error: 'Code not found' });
+    
+    if (!codeDoc.exists) {
+      console.log(`[DEBUG] Code not found: ${code}`);
+      return res.status(404).json({ error: 'Code not found' });
+    }
+    
     const { userId } = codeDoc.data();
+    console.log(`[DEBUG] Code found, userId: ${userId}`);
+    
     const grantedScope = Array.isArray(requestedScope) ? requestedScope.filter(s => ['view','upload'].includes(s)) : ['view'];
     const ttl = Math.max(300, Math.min(24 * 3600, durationSeconds));
     const accessToken = jwt.sign({ userId, hospitalId, scope: grantedScope }, process.env.JWT_SECRET, { expiresIn: ttl });
+    
+    console.log(`[DEBUG] Generated access token, storing to Firestore`);
     await db.collection('accessTokens').add({ userId, hospitalId, scope: grantedScope, accessToken, createdAt: Date.now(), expiresAt: Date.now() + ttl * 1000, via: 'code' });
+    
+    // Track doctor-patient connection if doctorId is provided
+    if (doctorId && hospitalId) {
+      console.log(`[DEBUG] Recording doctor-patient connection: doctorId=${doctorId}, patientId=${userId}`);
+      try {
+        await db.collection('doctorPatients').add({ 
+          doctorId, 
+          patientId: userId, 
+          hospitalId,
+          lastAccessed: Date.now() 
+        });
+      } catch (connErr) {
+        console.warn(`[WARN] Failed to record doctor-patient connection: ${connErr.message}`);
+        // Non-blocking - don't fail the token exchange if connection tracking fails
+      }
+    }
+    
+    console.log(`[SUCCESS] Token exchange complete for userId: ${userId}`);
     res.json({ accessToken, scope: grantedScope, userId });
   } catch (err) {
-    res.status(400).json({ error: 'Failed to exchange code' });
+    console.error('[API] Exchange code error:', err && err.message ? err.message : err);
+    console.error('[API] Error code:', err && err.code);
+    if (err && err.stack) console.error('[API] Stack:', err.stack);
+    res.status(400).json({ 
+      error: 'Failed to exchange code', 
+      details: err && err.message,
+      code: err && err.code
+    });
   }
 });
 
@@ -213,15 +298,33 @@ app.post('/upload-report-file', upload.single('file'), async (req, res) => {
 // Hospital uploads report (align with Med4U 'reports' collection schema)
 // Body: { accessToken, patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary }
 app.post('/hospital-upload-report', async (req, res) => {
-  console.log('[API] Hospital upload report requested');
-  const token = req.headers.authorization?.split('Bearer ')[1];
+  console.log('[API] ========== Hospital upload report requested ==========');
+  console.log('[DEBUG] Content-Type:', req.get('Content-Type'));
+  console.log('[DEBUG] Request headers:', JSON.stringify(req.headers, null, 2));
+  console.log('[DEBUG] typeof req.body:', typeof req.body);
+  console.log('[DEBUG] req.body keys:', req.body ? Object.keys(req.body) : 'body is null/undefined');
+  console.log('[DEBUG] Full Request body:', JSON.stringify(req.body, null, 2));
+  
+  // Support token supplied either in Authorization header (Bearer ...) or in request body.accessToken
+  const headerToken = req.headers.authorization?.split('Bearer ')[1];
+  const bodyToken = req.body?.accessToken;
+  const { patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary } = req.body || {};
+  const token = headerToken || bodyToken;
+  
+  console.log('[DEBUG] Extracted values:');
+  console.log('  - headerToken present:', !!headerToken);
+  console.log('  - bodyToken value:', bodyToken ? bodyToken.substring(0, 20) + '...' : 'undefined');
+  console.log('  - token present:', !!token);
+  console.log('  - patientId:', patientId);
+  
   if (!token) {
+    console.error('[API] ❌ No token provided - header:', !!headerToken, ', body:', !!bodyToken);
     return res.status(401).json({ error: 'No authorization token provided' });
   }
 
-  const { patientId, reportTitle, reportType, reportDate, reportUrl, fileSize, fileType, summary } = req.body;
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('[DEBUG] Token decoded:', decoded);
     if (!decoded.scope.includes('upload')) {
       console.log('[API] Upload permission denied');
       return res.status(403).json({ error: 'No upload permission' });
@@ -251,25 +354,34 @@ app.post('/hospital-upload-report', async (req, res) => {
 
 // Hospital fetches reports (from 'reports' collection filtered by userId)
 app.post('/hospital-get-reports', async (req, res) => {
-  const { accessToken, patientId } = req.body;
+  // Support token supplied either in Authorization header (Bearer ...) or in request body.accessToken
+  const headerToken = req.headers.authorization?.split('Bearer ')[1];
+  const { accessToken: bodyToken, patientId } = req.body;
+  const token = headerToken || bodyToken;
+  if (!token) return res.status(401).json({ error: 'No authorization token provided' });
   try {
-    const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded.scope.includes('view')) return res.status(403).json({ error: 'No view permission' });
     const snap = await db.collection('reports').where('userId', '==', patientId).get();
     const reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     await db.collection('auditLogs').add({ patientId, action: 'view_reports', by: decoded.hospitalId, at: Date.now() });
     res.json({ reports });
   } catch (err) {
-    res.status(400).json({ error: 'Invalid or expired access token' });
+    console.error('[API] Error in /hospital-get-reports:', err.message);
+    res.status(400).json({ error: 'Invalid or expired access token', details: err.message });
   }
 });
 
 // Hospital fetches key patient profile data
 // Body: { accessToken, patientId }
 app.post('/hospital-get-profile', async (req, res) => {
-  const { accessToken, patientId } = req.body;
+  // Support token supplied either in Authorization header (Bearer ...) or in request body.accessToken
+  const headerToken = req.headers.authorization?.split('Bearer ')[1];
+  const { accessToken: bodyToken, patientId } = req.body;
+  const token = headerToken || bodyToken;
+  if (!token) return res.status(401).json({ error: 'No authorization token provided' });
   try {
-    const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded.scope.includes('view')) return res.status(403).json({ error: 'No view permission' });
 
     async function getByCollection(name) {
@@ -281,13 +393,14 @@ app.post('/hospital-get-profile', async (req, res) => {
       getByCollection('medications'),
       getByCollection('conditions'),
       getByCollection('cases'),
-      (await db.collection('reports').where('userId', '==', patientId).limit(5).get()).docs.map(d => ({ id: d.id, ...d.data() }))
+      (await db.collection('reports').where('userId', '==', patientId).get()).docs.map(d => ({ id: d.id, ...d.data() }))
     ]);
 
     await db.collection('auditLogs').add({ patientId, action: 'view_profile', by: decoded.hospitalId, at: Date.now() });
     res.json({ medications, conditions, cases, recentReports: reports });
   } catch (err) {
-    res.status(400).json({ error: 'Invalid or expired access token' });
+    console.error('[API] Error in /hospital-get-profile:', err.message);
+    res.status(400).json({ error: 'Invalid or expired access token', details: err.message });
   }
 });
 
@@ -306,5 +419,20 @@ app.post('/revoke-access', async (req, res) => {
 
 // TODO: Push notification endpoint
 
+// Global error handler for unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[SERVER] Uncaught Exception:', error);
+  process.exit(1);
+});
+
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Med4U Connect backend running on port ${PORT}`));
+const server = app.listen(PORT, () => console.log(`Med4U Connect backend running on port ${PORT}`));
+
+// Handle server errors
+server.on('error', (err) => {
+  console.error('[SERVER] Server error:', err);
+});

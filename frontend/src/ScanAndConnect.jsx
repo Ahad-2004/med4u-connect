@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { apiRequest } from './services/api';
 
 export default function ScanAndConnect({ hospitalId, onConnected }) {
   const [error, setError] = useState('');
@@ -11,20 +12,49 @@ export default function ScanAndConnect({ hospitalId, onConnected }) {
   const handleConnectWithUserId = async (userId) => {
     setError('');
     try {
-      const data = { accessToken: null, scope: ['view','upload'], userId };
+      // Get the current user (doctor) ID from Firebase Auth
+      const { auth } = await import('./firebaseConfig');
+      const { getAuth } = await import('firebase/auth');
+      const firebaseAuth = getAuth();
+      const uid = firebaseAuth.currentUser?.uid;
+      
+      // Exchange the scanned user code for a scoped access token from backend
+      let token = null;
+      let grantedScope = ['view'];
+      let patientId = userId; // Start with scanned code as backup
+      try {
+        const resp = await apiRequest('/exchange-user-code', {
+          method: 'POST',
+          body: JSON.stringify({ 
+            code: String(userId).toUpperCase(), 
+            hospitalId, 
+            doctorId: uid,
+            requestedScope: ['view', 'upload'] 
+          })
+        });
+        console.log('[FRONTEND] Token exchange response:', resp);
+        token = resp.accessToken;
+        grantedScope = resp.scope || grantedScope;
+        patientId = resp.userId || userId; // Use the real Firebase user ID from backend
+        console.log('[FRONTEND] Got token:', !!token, 'patientId:', patientId);
+      } catch (err) {
+        // If exchanging fails, continue but mark error
+        console.error('[FRONTEND] Token exchange failed:', err.message);
+        setError('Connected but token exchange failed');
+      }
+
+      if (!token) {
+        console.error('[FRONTEND] No access token received from backend');
+        setError('Failed to get access token');
+        return;
+      }
+
+      const data = { accessToken: token, scope: grantedScope, userId: patientId };
       setAccess(data);
       onConnected && onConnected(data);
-      try {
-        const { auth, db } = await import('./firebaseConfig');
-        const { addDoc, collection } = await import('firebase/firestore');
-        const { currentUser } = (await import('firebase/auth')).getAuth();
-        const uid = auth.currentUser?.uid || currentUser?.uid;
-        if (uid && userId) {
-          await addDoc(collection(db, 'doctorPatients'), { doctorId: uid, patientId: userId, lastAccessed: Date.now() });
-        }
-      } catch {}
       window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Connected to patient' } }))
     } catch (e) {
+      console.error('[FRONTEND] Connection error:', e.message);
       setError('Failed to connect.');
     }
   };

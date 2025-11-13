@@ -1,7 +1,8 @@
 // API Configuration
 const API_CONFIG = {
   development: {
-    BASE_URL: 'http://localhost:4000',
+    // In development use the Vite dev server proxy at /api which forwards to the backend
+    BASE_URL: import.meta.env.VITE_CONNECT_API_BASE || '/api',
     CLOUDINARY: {
       CLOUD_NAME: 'dnqn5xuyc',
       UPLOAD_PRESET: 'med4u_uploads'
@@ -18,7 +19,7 @@ const API_CONFIG = {
 
 const ENV = import.meta.env.MODE || 'development';
 
-export const API_BASE = import.meta.env.VITE_CONNECT_API_BASE || API_CONFIG[ENV].BASE_URL;
+export const API_BASE = API_CONFIG[ENV].BASE_URL;
 export const CLOUDINARY_CONFIG = API_CONFIG[ENV].CLOUDINARY;
 
 // API Helper function

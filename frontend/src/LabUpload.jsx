@@ -12,6 +12,13 @@ export default function LabUpload({ accessToken, patientId }) {
     e.preventDefault();
     setMsg('');
     try {
+      console.log('[FRONTEND] LabUpload submit - accessToken:', !!accessToken, 'patientId:', patientId);
+      
+      if (!accessToken) {
+        setMsg('No access token - please connect to a patient first');
+        return;
+      }
+
       let uploadMeta = null;
       if (file) {
         uploadMeta = await uploadFile(
@@ -21,19 +28,24 @@ export default function LabUpload({ accessToken, patientId }) {
         );
       }
 
-      const data = await apiRequest('/hospital-upload-report', {
+      console.log('[FRONTEND] Sending upload request with token');
+      // Send to backend API instead of writing to Firestore directly
+      const response = await apiRequest('/hospital-upload-report', {
         method: 'POST',
-        token: accessToken,
         body: JSON.stringify({
+          accessToken,
           patientId,
           reportTitle: form.title || 'Lab Report',
           reportType: form.type || 'Lab Results',
           reportDate: form.date || new Date().toISOString().split('T')[0],
-          reportUrl: uploadMeta?.downloadURL || form.url || null,
+          reportUrl: uploadMeta?.downloadURL || form.url || '',
           fileSize: uploadMeta?.size || null,
-          fileType: uploadMeta?.type || null
+          fileType: uploadMeta?.type || null,
+          summary: { findings: [{ name: 'No findings', value: '', unit: '', normal: '' }] }
         })
       });
+
+      console.log('[FRONTEND] Upload response:', response);
       setMsg('Uploaded successfully');
       setProgress(0);
       setFile(null);

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_CONNECT_API_BASE || 'http://localhost:4000';
+import { apiRequest } from './services/api';
 
 export default function CodeConnect({ hospitalId, onConnected }) {
   const [code, setCode] = useState('');
@@ -14,9 +13,8 @@ export default function CodeConnect({ hospitalId, onConnected }) {
     if (!trimmed) { setError('Enter a code'); return; }
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/exchange-user-code`, {
+      const data = await apiRequest('/exchange-user-code', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: trimmed,
           hospitalId: hospitalId || 'unknown-hospital',
@@ -24,8 +22,6 @@ export default function CodeConnect({ hospitalId, onConnected }) {
           durationSeconds: 3600
         })
       });
-      if (!res.ok) throw new Error('Invalid code or access denied');
-      const data = await res.json();
       onConnected && onConnected({ accessToken: data.accessToken, scope: data.scope, userId: data.userId });
     } catch (err) {
       setError('Failed to connect with code');
