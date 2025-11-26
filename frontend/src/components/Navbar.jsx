@@ -9,8 +9,12 @@ export default function Navbar({ user, onLogout }) {
           <h1 className="text-xl font-semibold tracking-tight">Med4U Connect</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button aria-label="Notifications" className="btn btn-secondary h-9 w-9 rounded-full p-0">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2 2 0 002-2H10a2 2 0 002 2z"/><path d="M18 16v-5a6 6 0 10-12 0v5l-2 2h16l-2-2z"/></svg>
+          <button
+            aria-label="Notifications"
+            className="btn btn-secondary h-9 w-9 rounded-full p-0"
+            onClick={() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'No notifications yet' } }))}
+          >
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2 2 0 002-2H10a2 2 0 002 2z"/><path d="M18 16v-5a6 6 0 10-12 0v5l-2 2h16l-2-2z"/></svg>
           </button>
           <ThemeToggle />
           <div className="flex items-center gap-2 pl-2 ml-2 border-l border-gray-200 dark:border-gray-800">

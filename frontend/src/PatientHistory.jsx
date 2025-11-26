@@ -25,15 +25,19 @@ export default function PatientHistory({ doctorId, onSelect }) {
   return (
     <div>
       <h3>Recent Patients</h3>
-      <ul>
-        {items.map(it => (
-          <li key={it.id}>
-            <button onClick={() => onSelect && onSelect(it.patientId)}>
-              {it.patientId} {it.note ? `- ${it.note}` : ''}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-500">No recent patients yet.</p>
+      ) : (
+        <ul>
+          {items.map(it => (
+            <li key={it.id}>
+              <button onClick={() => onSelect && onSelect(it.patientId)}>
+                {it.patientName || it.patientId} {it.note ? `- ${it.note}` : ''}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

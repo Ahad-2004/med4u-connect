@@ -3,7 +3,6 @@ import './index.css'
 import ScanAndConnect from './ScanAndConnect'
 import LabUpload from './LabUpload'
 import DoctorPatientView from './DoctorPatientView'
-import CodeConnect from './CodeConnect'
 import { AuthProvider, useAuth } from './AuthContext'
 import Login from './Login'
 import PatientHistory from './PatientHistory'
@@ -39,7 +38,6 @@ function AppInner() {
               <h2 className="text-lg font-medium mb-3">Scan or Enter Patient Code</h2>
               <div className="space-y-3">
                 <ScanAndConnect hospitalId={hospitalId} onConnected={(a) => { setAccess(a); setPatientId(a?.userId || ''); }} />
-                <CodeConnect hospitalId={hospitalId} onConnected={(a) => { setAccess(a); setPatientId(a?.userId || ''); }} />
               </div>
             </div>
             <div className="card p-4">
@@ -50,7 +48,7 @@ function AppInner() {
 
           {/* Right column */}
           <div className="space-y-4">
-            <div className="card p-4">
+            <div className="card p-4" id="upload-report-card">
               <h2 className="text-lg font-medium mb-3">Upload Report</h2>
               {access && patientId ? (
                 <LabUpload accessToken={access.accessToken} patientId={patientId} onUploaded={() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Report uploaded successfully' } }))} />
@@ -76,10 +74,10 @@ function AppInner() {
       {/* Floating Action Button */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3">
         <button className="btn btn-primary shadow-xl rounded-full h-14 w-14 p-0" title="Upload Report" onClick={() => {
-          const el = document.querySelector('h2.text-lg.font-medium.mb-3')
+          const el = document.getElementById('upload-report-card')
           if (el) el.scrollIntoView({ behavior: 'smooth' })
         }}>
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5v14m-7-7h14"/></svg>
+          <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5v14m-7-7h14"/></svg>
         </button>
       </div>
 
