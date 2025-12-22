@@ -11,7 +11,7 @@ function Avatar({ name, id }) {
     return 'RM';
   }, [name, id]);
   return (
-    <div className="h-10 w-10 rounded-full bg-teal-600 text-white grid place-items-center text-sm font-semibold shadow">
+    <div className="h-10 w-10 rounded-full bg-blue-600 text-white grid place-items-center text-sm font-semibold shadow">
       {initials}
     </div>
   );
@@ -34,9 +34,9 @@ function StatCard({ icon, label, value, accent }) {
 function FileIcon({ url, type }) {
   const isPdf = (url || '').toLowerCase().endsWith('.pdf') || (type || '').toLowerCase().includes('pdf');
   return isPdf ? (
-    <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6" fill="currentColor"/></svg>
+    <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" fill="currentColor" /></svg>
   ) : (
-    <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14"/><path d="M3 19l6-6 4 4 5-5 3 3"/></svg>
+    <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14" /><path d="M3 19l6-6 4 4 5-5 3 3" /></svg>
   );
 }
 
@@ -101,9 +101,9 @@ export default function DoctorPatientView({ accessToken, patientId }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Allergies" value={allergies.length} accent="bg-rose-500" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-4.5-8-10a8 8 0 1116 0c0 5.5-8 10-8 10z"/></svg>} />
-        <StatCard label="Medications" value={meds.length} accent="bg-teal-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v4H7z"/><path d="M5 11h14v8a2 2 0 01-2 2H7a2 2 0 01-2-2z"/></svg>} />
-        <StatCard label="Conditions" value={conditions.length} accent="bg-blue-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>} />
+        <StatCard label="Allergies" value={allergies.length} accent="bg-rose-500" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-4.5-8-10a8 8 0 1116 0c0 5.5-8 10-8 10z" /></svg>} />
+        <StatCard label="Medications" value={meds.length} accent="bg-blue-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v4H7z" /><path d="M5 11h14v8a2 2 0 01-2 2H7a2 2 0 01-2-2z" /></svg>} />
+        <StatCard label="Conditions" value={conditions.length} accent="bg-purple-600" icon={<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z" /></svg>} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -112,7 +112,7 @@ export default function DoctorPatientView({ accessToken, patientId }) {
           <div className="flex flex-wrap gap-2">
             {allergies.length === 0 && <span className="text-xs text-gray-500">No allergies recorded</span>}
             {allergies.map(a => (
-              <span key={a.id} className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-200">{a.name || a.title}</span>
+              <span key={a.id} className="badge badge-red">{a.name || a.title}</span>
             ))}
           </div>
         </div>
