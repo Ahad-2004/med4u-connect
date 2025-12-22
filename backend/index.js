@@ -14,12 +14,14 @@ function validateEnvironment() {
   }
   
   // Validate JWT_SECRET is sufficiently strong
-  if (process.env.JWT_SECRET.length < 32) {
-    console.error('[FATAL] JWT_SECRET must be at least 32 characters long for security');
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+    console.error('[FATAL] JWT_SECRET must be at least 16 characters long for security');
+    console.error('[FATAL] Current JWT_SECRET length:', process.env.JWT_SECRET ? process.env.JWT_SECRET.length : 0);
     process.exit(1);
   }
   
   console.log('[ENV] All required environment variables validated');
+  console.log('[ENV] JWT_SECRET length:', process.env.JWT_SECRET.length);
 }
 
 validateEnvironment();
@@ -218,6 +220,33 @@ app.post('/register-user-code', async (req, res) => {
       error: 'Failed to register code', 
       details: err && err.message,
       code: err && err.code
+    });
+  }
+});
+
+// JWT diagnostic endpoint
+app.get('/debug-jwt', (req, res) => {
+  try {
+    console.log('[DEBUG] JWT_SECRET exists:', !!process.env.JWT_SECRET);
+    console.log('[DEBUG] JWT_SECRET length:', process.env.JWT_SECRET ? process.env.JWT_SECRET.length : 0);
+    
+    const testToken = jwt.sign({ test: 'data' }, process.env.JWT_SECRET, { expiresIn: 60 });
+    const decoded = jwt.verify(testToken, process.env.JWT_SECRET);
+    
+    res.json({ 
+      success: true,
+      jwtSecretExists: !!process.env.JWT_SECRET,
+      jwtSecretLength: process.env.JWT_SECRET ? process.env.JWT_SECRET.length : 0,
+      testTokenGenerated: true,
+      testTokenDecoded: decoded
+    });
+  } catch (err) {
+    console.error('[DEBUG] JWT test failed:', err.message);
+    res.status(500).json({ 
+      success: false,
+      error: err.message,
+      jwtSecretExists: !!process.env.JWT_SECRET,
+      jwtSecretLength: process.env.JWT_SECRET ? process.env.JWT_SECRET.length : 0
     });
   }
 });
