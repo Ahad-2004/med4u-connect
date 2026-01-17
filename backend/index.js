@@ -30,7 +30,6 @@ const admin = require('firebase-admin');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 
@@ -453,6 +452,103 @@ app.post('/hospital-get-profile', async (req, res) => {
   } catch (err) {
     console.error('[API] Error in /hospital-get-profile:', err.message);
     res.status(400).json({ error: 'Invalid or expired access token', details: err.message });
+  }
+});
+
+// Hospital creates or updates patient condition (speech-to-text or manual)
+// Body: { accessToken, patientId, action, data, docId }
+// action = 'create' | 'update'
+// data = { name, description, severity, diagnosedDate, status, medications, notes }
+app.post('/hospital-manage-collection', async (req, res) => {
+  const headerToken = req.headers.authorization?.split('Bearer ')[1];
+  const { accessToken: bodyToken, patientId, action, data, docId } = req.body;
+  const token = headerToken || bodyToken;
+  
+  if (!token) return res.status(401).json({ error: 'No authorization token provided' });
+  if (!patientId) return res.status(400).json({ error: 'patientId is required' });
+  if (!action || !['create', 'update'].includes(action)) {
+    return res.status(400).json({ error: 'action must be "create" or "update"' });
+  }
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ error: 'data object is required' });
+  }
+  if (action === 'update' && !docId) {
+    return res.status(400).json({ error: 'docId is required for update action' });
+  }
+  
+  try {
+    // Verify and decode JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check write permission (upload scope required)
+    if (!decoded.scope || !decoded.scope.includes('upload')) {
+      return res.status(403).json({ error: 'No write permission (upload scope required)' });
+    }
+    
+    // Security: Verify token userId matches patientId (doctor can't write for different patient)
+    if (decoded.userId !== patientId) {
+      console.warn(`[API] Security: Token userId ${decoded.userId} does not match patientId ${patientId}`);
+      return res.status(403).json({ error: 'Token does not match target patient' });
+    }
+    
+    // Validate and sanitize data fields
+    const allowedFields = ['name', 'description', 'severity', 'diagnosedDate', 'status', 'medications', 'notes'];
+    const sanitizedData = {};
+    
+    allowedFields.forEach(field => {
+      if (field in data && data[field] !== null && data[field] !== undefined) {
+        sanitizedData[field] = String(data[field]).trim();
+      }
+    });
+    
+    // Require at least name field
+    if (!sanitizedData.name) {
+      return res.status(400).json({ error: 'Condition name is required' });
+    }
+    
+    // Force userId and timestamps
+    const finalData = {
+      ...sanitizedData,
+      userId: patientId,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Only set createdAt on create
+    if (action === 'create') {
+      finalData.createdAt = new Date().toISOString();
+    }
+    
+    let result;
+    if (action === 'create') {
+      // Add new condition
+      const docRef = await db.collection('conditions').add(finalData);
+      result = { id: docRef.id, ...finalData };
+      console.log(`[API] Condition created for patient ${patientId}: ${docRef.id}`);
+    } else if (action === 'update') {
+      // Update existing condition
+      const docRef = db.collection('conditions').doc(docId);
+      await docRef.update(finalData);
+      result = { id: docId, ...finalData };
+      console.log(`[API] Condition updated for patient ${patientId}: ${docId}`);
+    }
+    
+    // Audit log
+    await db.collection('auditLogs').add({
+      patientId,
+      action: `${action}_condition`,
+      by: decoded.hospitalId,
+      at: Date.now(),
+      details: { conditionName: sanitizedData.name }
+    });
+    
+    res.json({ success: true, id: result.id, data: result });
+  } catch (err) {
+    if (err.name === 'JsonWebTokenError') {
+      console.error('[API] JWT Error in /hospital-manage-collection:', err.message);
+      return res.status(401).json({ error: 'Invalid or expired access token' });
+    }
+    console.error('[API] Error in /hospital-manage-collection:', err.message);
+    res.status(400).json({ error: 'Failed to save condition', details: err.message });
   }
 });
 

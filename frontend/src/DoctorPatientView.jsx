@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './services/api';
+import VoiceConditionForm from './components/VoiceConditionForm';
 
 function Avatar({ name, id }) {
   const initials = useMemo(() => {
@@ -45,6 +46,7 @@ export default function DoctorPatientView({ accessToken, patientId }) {
   const [reports, setReports] = useState([]);
   const [error, setError] = useState('');
   const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
+  const [showVoiceForm, setShowVoiceForm] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -65,6 +67,17 @@ export default function DoctorPatientView({ accessToken, patientId }) {
     }
     if (patientId && accessToken) load();
   }, [patientId, accessToken]);
+
+  // Refresh profile data after condition is saved via voice
+  const handleConditionSaved = async (newCondition) => {
+    console.log('[FRONTEND] Condition saved, refreshing profile:', newCondition);
+    // Add the new condition to the profile immediately for instant feedback
+    setProfile(prev => ({
+      ...prev,
+      conditions: [newCondition, ...prev.conditions]
+    }));
+    setShowVoiceForm(false);
+  };
 
   const sortedReports = useMemo(() => {
     const arr = [...reports];
@@ -108,7 +121,9 @@ export default function DoctorPatientView({ accessToken, patientId }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="card p-4">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Allergies</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Allergies</h4>
+          </div>
           <div className="flex flex-wrap gap-2">
             {allergies.length === 0 && <span className="text-xs text-gray-500">No allergies recorded</span>}
             {allergies.map(a => (
@@ -117,7 +132,16 @@ export default function DoctorPatientView({ accessToken, patientId }) {
           </div>
         </div>
         <div className="card p-4">
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Important Conditions</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Important Conditions</h4>
+            <button
+              onClick={() => setShowVoiceForm(!showVoiceForm)}
+              className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition"
+              title="Add condition via voice input"
+            >
+              🎤 Add
+            </button>
+          </div>
           <ul className="list-disc pl-5 space-y-1 text-sm">
             {conditions.length === 0 && <li className="text-gray-500">No conditions recorded</li>}
             {conditions.map(c => (
@@ -126,6 +150,16 @@ export default function DoctorPatientView({ accessToken, patientId }) {
           </ul>
         </div>
       </div>
+
+      {/* Voice Condition Form */}
+      {showVoiceForm && (
+        <VoiceConditionForm
+          accessToken={accessToken}
+          patientId={patientId}
+          onConditionSaved={handleConditionSaved}
+          onCancel={() => setShowVoiceForm(false)}
+        />
+      )}
 
       <div className="card p-4 overflow-x-auto">
         <div className="flex items-center justify-between mb-3">
